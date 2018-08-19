@@ -5,10 +5,14 @@ import re
 from os.path import dirname
 from os import system
 import os
+import pymkv
+import time
 
 DOWNLOAD_ROOT = "./Shows" # Set this to the path where you want videos saved to
-DOWNLOAD_SUBTITLES = False # Set this to True if you want to download closed caption files as well
+DOWNLOAD_SUBTITLES = True # Set this to True if you want to download closed caption files as well
 SUBTITLE_TYPE = "SRT" # Choose between Caption-SAMI, DFXP, SRT, and WebVTT
+CREATE_MKV = True # This will merge video and subtitle files into a single .mkv file
+REMOVE_ORIGINALS = True # This will delete the original .mp4 and subtitle file after a successful mkvmerge
 
 def get_shows():
     return requests.get(
@@ -83,7 +87,32 @@ def create_output_file(video_info):
                 bit = requests.get(video_info['subtitle_url'])
                 s.write(bit.content)
                 print('\nComplete!')
-    
+        if( CREATE_MKV is True ):
+            print("you want to create an mkv file with subtitles")
+            time.sleep(.300) # mkvmerge kept throwing an error, and this 300 millisecond delay seemed to fix it. Dirty, but it worked.
+            create_mkv_file(video_info['video_file'], subtitle_filename)
+    else:
+        if( CREATE_MKV is True ):
+            print("you want to create an mkv file without subtitles")
+            time.sleep(.300) # mkvmerge kept throwing an error, and this 300 millisecond delay seemed to fix it. Dirty, but it worked.
+            create_mkv_file(video_info['video_file'])
+
+def create_mkv_file(video_file, subtitle_file=None):
+    mkv = pymkv.MKVFile()
+    mkv.add_track(video_file+".mp4")
+    if( subtitle_file is not None): # Subtitle was downloaded, add it to .mkv file
+        print(subtitle_file)
+        mkv.add_track(subtitle_file)
+    try:    
+        mkv.mux(video_file+".mkv")
+    except:
+        print("mkv file creation failed.")
+    else:
+        if( REMOVE_ORIGINALS is True ):
+            os.remove(video_file+".mp4")
+            if( subtitle_file is not None ):
+                os.remove(subtitle_file)
+
 if __name__ == '__main__':
     shows = get_shows()
     show_title = ask_which_show(shows)
@@ -93,7 +122,7 @@ if __name__ == '__main__':
     system('clear')
     index_to_get = ask_which_episode(available_episodes)
     if(index_to_get.upper() == "A"): # Download all episodes of selected show
-        for item in available_episodes: 
+        for item in available_episodes:
             video_info = get_video_info(item, DOWNLOAD_SUBTITLES)
             create_output_file(video_info)
     else: # Download only selected episode
